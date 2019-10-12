@@ -57,3 +57,19 @@ export const removeBlock = data => ({
   type: 'REMOVE_BLOCK',
   payload: data,
 });
+
+export const ignoreGroupCommands = data => ({
+  type: 'IGNORE_GROUP_COMMANDS',
+  payload: data,
+});
+
+export const unignoreGroupCommands = data => ({
+  type: 'UNIGNORE_GROUP_COMMANDS',
+  payload: data,
+});
+
+export const listGroupCommands = data => ({
+  type: 'LIST_GROUP_COMMANDS',
+  payload: data,
+});
+
