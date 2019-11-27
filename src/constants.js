@@ -1,6 +1,10 @@
-export const prefix = '.';
+export const defaultPrefix = '-';
 
 export const privilegedRoles = ['Admins', 'Moderators'];
+
+export const coolDownRoles = ['COOLDOWN'];
+
+export const coolDownSeconds = 120;
 
 export const teams = {
   team_0: 'Red Team',

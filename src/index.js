@@ -10,16 +10,19 @@ import {
   assignQueryServers,
   assignGameTypes,
   assignBlocks,
+  setPrefix,
 } from './store/actions';
 import { DiscordServers, UT99QueryServers, GameTypes, Blocks } from './models';
 import { handlers, commands, emitters } from './commands';
 import { sanitizeName } from './utils';
 import {
-  prefix,
+  defaultPrefix,
   offline,
   pugEvents,
   privilegedRoles,
   emojis,
+  coolDownRoles,
+  coolDownSeconds,
 } from './constants';
 import { formatBroadcastCaptainsReady } from './formats';
 import { compareAsc } from 'date-fns';
@@ -32,7 +35,10 @@ const bBot = new Client({
 
 async function onMessage(message) {
   if (message.author.equals(bBot.user)) return;
-  if (!message.content.startsWith(prefix)) return;
+
+  const state = store.getState();
+  const channelPrefix = state.globals[message.guild.id].prefix || defaultPrefix;
+  if (!message.content.startsWith(channelPrefix)) return;
 
   const { id, username } = message.author;
   const roles = message.member ? message.member.roles : null;
@@ -50,7 +56,7 @@ async function onMessage(message) {
     : null;
 
   const [first, ...args] = message.content
-    .substring(prefix.length)
+    .substring(channelPrefix.length)
     .split(' ')
     .filter(Boolean);
   const action = first && first.toLowerCase();
@@ -124,6 +130,40 @@ bBot.on('presenceUpdate', (_, { user, guild, presence: { status } }) => {
   }
 });
 
+bBot.on(
+  'guildMemberUpdate',
+  ({ roles: oldRoles }, { roles: newRoles, guild, id }) => {
+    const state = store.getState();
+    const { pugChannel } = state.pugs[guild.id] || {};
+    const { queryChannel } = state.queryServers[guild.id] || {};
+
+    // No point in sending cooldown message
+    if (!pugChannel && !queryChannel) return;
+
+    const wasPresentBefore = coolDownRoles.some(cr =>
+      oldRoles.find(or => or.name === cr)
+    );
+    const isPresentNow = coolDownRoles.some(cr =>
+      newRoles.find(nr => nr.name === cr)
+    );
+
+    const channel = guild.channels.get(pugChannel || queryChannel);
+    if (!wasPresentBefore && isPresentNow) {
+      // Cooldown Role Added
+      channel.send(
+        `<@${id}>, you have been assigned a \`COOLDOWN\` role. This because the admins/moderators feel you spam certain bot commands alot. The following commands are part of this restriction:-\n
+        **1. promoting pugs**
+        **2. querying servers**\n\nThis means you & other members part of this restriction will be able to use the aforementioned commands \`once\` every ${coolDownSeconds} seconds.`
+      );
+    } else if (wasPresentBefore && !isPresentNow) {
+      // Cooldown Role Removed
+      channel.send(
+        `<@${id}>, the \`COOLDOWN\` restriction has been lifted up by the authorities. Ensure it doesn't happen again.`
+      );
+    }
+  }
+);
+
 (async () => {
   try {
     await mongoose.connect(process.env.DB_HOST, {
@@ -147,7 +187,7 @@ const hydrateStore = async () => {
     Blocks.find({}).exec(),
   ]);
 
-  dServers.forEach(({ server_id, pug_channel, query_channel }) => {
+  dServers.forEach(({ server_id, pug_channel, query_channel, prefix }) => {
     store.dispatch(INIT({ serverId: server_id }));
     store.dispatch(
       setPugChannel({
@@ -158,6 +198,8 @@ const hydrateStore = async () => {
     store.dispatch(
       setQueryChannel({ serverId: server_id, queryChannel: query_channel })
     );
+
+    store.dispatch(setPrefix({ serverId: server_id, prefix: prefix }));
   });
 
   qServers.forEach(({ server_id, query_servers }) => {
